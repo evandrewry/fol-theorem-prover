@@ -247,17 +247,28 @@
         (t nil)))
 
 (defun single-term-clause-p (clause)
-  (reduce #'(lambda (x y)
-              (and x y))
-          (mapcar #'(lambda (term) 
-                      (or (atom term)
-                          (and (listp term)
-                               (equal '_not (car term))
-                               (single-term-clause-p (cdr term)))))
-                  clause)))
+  (eql 1 (length clause)))
 
-(defun resolve-clause (clause resolver)
-  t)
+(defun resolve-clause (clause resolver theta)
+  (print (list clause resolver theta))
+  (cond ((and (single-term-clause-p clause)
+              (single-term-clause-p resolver))
+         (unify (car clause) (car resolver) theta))
+        ((single-term-clause-p clause)
+         ;;clause has 1 term but resolver does not
+         (resolve-clause clause (cdr resolver)
+                         (resolve-clause clause (list (car resolver)) theta)))
+        ((single-term-clause-p resolver)
+         ;;resolver has 1 term but clause does not
+         (let ((new-theta (resolve-clause (list (car clause)) resolver theta)))
+         (resolve-clause (cdr clause) resolver
+                         (if (eql possible-fail 'fail)
+                           theta
+                           possible-fail))))
+        (t
+          ;;both have multiple terms
+         (resolve-clause clause (cdr resolver)
+                         (resolve-clause clause (list (car resolver)) theta)))))
 
 (defun proof-goalp (proof-state)
   (null (proof-state-resolvers proof-state)))
@@ -265,7 +276,7 @@
 (defun proof-successor (proof-state)
   (remove 'fail (mapcar #'(lambda (kb-member)
                             (resolve-clause kb-member
-                                            (proof-state-resolvers proof-state)))
+                                            (proof-state-resolvers proof-state) nil))
                         (proof-state-kb proof-state))))
 
 (defun resolve (initial-state)
