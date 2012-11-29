@@ -249,26 +249,53 @@
 (defun single-term-clause-p (clause)
   (eql 1 (length clause)))
 
-(defun resolve-clause (clause resolver theta)
-  (print (list clause resolver theta))
+(defun atom-bind-equal (x y theta)
+  (print (list x y theta))
+  (let ((xb (if (varp x) (cdr (assoc x theta)) x))
+        (yb (if (varp y) (cdr (assoc y theta)) y)))
+    (print (list xb yb theta))
+    (equal xb yb)))
+
+(defun bind-equal (x y theta)
+  (cond ((and (atom x) (atom y))
+         (atom-bind-equal x y theta))
+        ((and (listp x) (listp y))
+         (and (atom-bind-equal (car x) (car y) theta)
+              (atom-bind-equal (cdr x) (cdr y) theta)))
+        (t nil)))
+
+(defun negations-p (t1 t2 theta)
+  (or (and (eql (car t1) '_not)
+           (bind-equal (cadr t1) t2 theta))
+      (and (eql (car t2) '_not)
+           (bind-equal (cadr t2) t1 theta))))
+
+(defun resolve-clause (clause resolver theta &optional (actions nil))
+  (print (list clause resolver theta actions))
   (cond ((and (single-term-clause-p clause)
               (single-term-clause-p resolver))
-         (unify (car clause) (car resolver) theta))
+         (let ((new-theta (unify (car clause) (car resolver) theta))
+               (resolvent nil))
+           (if (eql 'fail new-theta)
+             actions
+             (cons (list resolvent new-theta) actions))))
         ((single-term-clause-p clause)
          ;;clause has 1 term but resolver does not
-         (resolve-clause clause (cdr resolver)
-                         (resolve-clause clause (list (car resolver)) theta)))
+         (resolve-clause
+           clause (cdr resolver) theta
+           (cons (resolve-clause clause (list (car resolver)) theta actions)
+                 actions)))
         ((single-term-clause-p resolver)
          ;;resolver has 1 term but clause does not
-         (let ((new-theta (resolve-clause (list (car clause)) resolver theta)))
-         (resolve-clause (cdr clause) resolver
-                         (if (eql possible-fail 'fail)
-                           theta
-                           possible-fail))))
+         (resolve-clause
+           (cdr clause) resolver theta
+           (cons (resolve-clause (list (car clause)) resolver theta actions)
+                 actions)))
         (t
           ;;both have multiple terms
-         (resolve-clause clause (cdr resolver)
-                         (resolve-clause clause (list (car resolver)) theta)))))
+          (resolve-clause clause (cdr resolver) theta
+                          (append (resolve-clause clause (list (car resolver)) theta actions)
+                                  actions)))))
 
 (defun proof-goalp (proof-state)
   (null (proof-state-resolvers proof-state)))
